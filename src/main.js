@@ -1,6 +1,6 @@
 import { getSongLibrary, getChart, setTokenGetter, registerMember, getLeaderboard, submitScore, recordPlay } from './data.js';
 import { track } from './analytics.js';
-import { onUser, getIdToken, signInWithGoogle, signOutUser } from './auth.js';
+import { onUser, getIdToken, signInWithGoogle, signOutUser, signInWithEmail, registerWithEmail } from './auth.js';
 
 // VAWE TAP • responsive canvas with a constant logical 390px width.
 // Gameplay height and hit-line positions follow the available screen height.
@@ -53,26 +53,82 @@ let clickZones=[];
 S.user=null;S.authReady=false;S.afterLogin='songs';S.loginBusy=false;S.loginError='';
 S.board={status:'idle',data:null,newBest:false,error:''};
 setTokenGetter(getIdToken);
+// Called once a Firebase user is ready: registers the wiiwave.com member (listener) and moves on.
+async function afterSignIn(user){
+ S.user={uid:user.uid,name:user.displayName||user.email||'Player',photo:user.photoURL||null};
+ try{await registerMember();}catch(e){
+  if(e.status===403){setLoginMsg(e.message);signOutUser();S.user=null;return;}
+ }
+ track('login',{method:user.providerData?.[0]?.providerId||'password'});
+ if(S.scene==='login')go(S.afterLogin||'songs');
+}
 onUser(async user=>{
  S.authReady=true;
  if(!user){S.user=null;return;}
- S.user={uid:user.uid,name:user.displayName||user.email||'Player',photo:user.photoURL||null};
- try{await registerMember();}catch(e){
-  if(e.status===403){S.loginError=e.message;signOutUser();S.user=null;return;}
+ if(S.registering)return; // register flow sets the display name first, then calls afterSignIn itself
+ await afterSignIn(user);
+});
+// ── Login panel (HTML overlay: real inputs so phone keyboards work) ──
+const lp={panel:document.querySelector('#loginPanel'),msg:document.querySelector('#loginMsg'),form:document.querySelector('#emailForm'),
+ name:document.querySelector('#afName'),email:document.querySelector('#afEmail'),pass:document.querySelector('#afPass'),pass2:document.querySelector('#afPass2'),
+ submit:document.querySelector('#afSubmit'),google:document.querySelector('#googleBtn'),back:document.querySelector('#loginBack'),tabs:[...document.querySelectorAll('.lp-tab')]};
+let loginMode='login';
+function setLoginMsg(text){lp.msg.textContent=text||'';}
+function setLoginMode(mode){
+ loginMode=mode;
+ lp.tabs.forEach(b=>b.classList.toggle('on',b.dataset.mode===mode));
+ const reg=mode==='register';
+ lp.name.hidden=!reg;lp.pass2.hidden=!reg;
+ lp.pass.autocomplete=reg?'new-password':'current-password';
+ lp.submit.textContent=reg?'CREATE ACCOUNT':'LOGIN';
+ setLoginMsg('');
+}
+function setLoginBusy(busy){S.loginBusy=busy;[lp.submit,lp.google,...lp.tabs].forEach(b=>b.disabled=busy);}
+function authErrorText(e){
+ switch(e?.code){
+  case 'auth/email-already-in-use':return 'อีเมลนี้ถูกใช้งานแล้ว — ลองกด LOGIN แทน';
+  case 'auth/invalid-email':return 'รูปแบบอีเมลไม่ถูกต้อง';
+  case 'auth/weak-password':return 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+  case 'auth/invalid-credential':case 'auth/wrong-password':case 'auth/user-not-found':return 'อีเมลหรือรหัสผ่านไม่ถูกต้อง';
+  case 'auth/too-many-requests':return 'ลองหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่';
+  case 'auth/network-request-failed':return 'เครือข่ายมีปัญหา ลองใหม่อีกครั้ง';
+  case 'auth/operation-not-allowed':return 'ระบบยังไม่เปิดให้สมัครด้วยอีเมล';
+  default:return 'ไม่สำเร็จ ลองใหม่อีกครั้ง';
  }
- track('login',{method:'google'});
- if(S.scene==='login')go(S.afterLogin||'songs');
+}
+lp.tabs.forEach(b=>b.addEventListener('click',()=>setLoginMode(b.dataset.mode)));
+lp.back.addEventListener('click',()=>go('home'));
+lp.google.addEventListener('click',()=>doSignIn());
+lp.form.addEventListener('submit',async ev=>{
+ ev.preventDefault();
+ if(S.loginBusy)return;
+ const email=lp.email.value.trim(),password=lp.pass.value,name=lp.name.value.trim();
+ if(!email||!password){setLoginMsg('กรอกอีเมลและรหัสผ่านก่อน');return;}
+ setLoginMsg('');
+ if(loginMode==='register'){
+  if(!name){setLoginMsg('กรอกชื่อที่จะแสดงบนอันดับ');return;}
+  if(password.length<6){setLoginMsg('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');return;}
+  if(password!==lp.pass2.value){setLoginMsg('รหัสผ่านไม่ตรงกัน');return;}
+  setLoginBusy(true);S.registering=true;
+  try{const user=await registerWithEmail(name,email,password);S.registering=false;await afterSignIn(user);}
+  catch(e){S.registering=false;setLoginMsg(authErrorText(e));}
+  finally{S.registering=false;setLoginBusy(false);}
+ }else{
+  setLoginBusy(true);
+  try{await signInWithEmail(email,password);}catch(e){setLoginMsg(authErrorText(e));}
+  finally{setLoginBusy(false);}
+ }
 });
 async function doSignIn(){
  if(S.loginBusy)return;
- S.loginBusy=true;S.loginError='';
+ setLoginBusy(true);setLoginMsg('');
  try{await signInWithGoogle();}catch(e){
   const code=e?.code||'';
   if(code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request'){/* user changed their mind */}
-  else if(code==='auth/unauthorized-domain')S.loginError='โดเมนนี้ยังไม่ได้รับอนุญาตใน Firebase Auth (เพิ่ม game.wiiwave.com)';
-  else if(code==='auth/popup-blocked')S.loginError='เบราว์เซอร์บล็อกหน้าต่างล็อกอิน กรุณาอนุญาต pop-up แล้วลองใหม่';
-  else S.loginError='เข้าสู่ระบบไม่สำเร็จ ลองใหม่อีกครั้ง';
- }finally{S.loginBusy=false;}
+  else if(code==='auth/unauthorized-domain')setLoginMsg('โดเมนนี้ยังไม่ได้รับอนุญาตใน Firebase Auth (เพิ่ม game.wiiwave.com)');
+  else if(code==='auth/popup-blocked')setLoginMsg('เบราว์เซอร์บล็อกหน้าต่างล็อกอิน กรุณาอนุญาต pop-up แล้วลองใหม่');
+  else setLoginMsg('เข้าสู่ระบบไม่สำเร็จ ลองใหม่อีกครั้ง');
+ }finally{setLoginBusy(false);}
 }
 function signOutAndHome(){signOutUser();S.user=null;go('home');}
 
@@ -80,10 +136,19 @@ let lastFrame=performance.now();
 
 function px(x,y,w,h,color){ctx.fillStyle=color;ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h));}
 function t(text,x,y,size=16,color=C.white,align='left',shadow=false,bold=true){
- ctx.font=`${bold?'900':'600'} ${size}px ${/[ก-๙]/.test(text)?'Tahoma, sans-serif':'monospace'}`;
- ctx.textAlign=align;ctx.textBaseline='top';
- if(shadow){ctx.fillStyle='#06060c';ctx.fillText(String(text),x+2,y+3);}
- ctx.fillStyle=color;ctx.fillText(String(text),x,y);
+ text=String(text);
+ const family=/[ก-๙]/.test(text)?'Tahoma, Thonburi, Sarabun, sans-serif':'monospace';
+ const font=px=>`${bold?'900':'600'} ${px}px ${family}`;
+ ctx.font=font(size);ctx.textBaseline='top';
+ // Measure and align by hand (iOS Safari mis-aligned centred Thai text) and shrink anything wider than the screen.
+ let w=ctx.measureText(text).width;
+ const maxW=W-24;
+ if(w>maxW){size=Math.max(8,Math.floor(size*maxW/w));ctx.font=font(size);w=ctx.measureText(text).width;}
+ let left=align==='center'?x-w/2:align==='right'?x-w:x;
+ left=Math.max(4,Math.min(left,W-4-w));
+ ctx.textAlign='left';
+ if(shadow){ctx.fillStyle='#06060c';ctx.fillText(text,left+2,y+3);}
+ ctx.fillStyle=color;ctx.fillText(text,left,y);
 }
 function line(x,y,w,h,color){px(x,y,w,h,color);}
 function panel(x,y,w,h,fill=C.panel,border=C.frame,shadow=true){
@@ -526,21 +591,7 @@ function compactLogin(now){
  bg('home',now);
  t('VAWE',24,14,36,C.lime,'left',true);t('TAP',W-24,15,34,C.white,'right',true);
  px(24,66,342,3,C.lime);
- const cy=Math.max(110,Math.round(H*.2));
- panel(27,cy,336,300,'#191d22','#464e4e');
- t('SIGN IN TO PLAY',W/2,cy+22,22,C.white,'center',true);
- t('เข้าสู่ระบบก่อนเล่น เพื่อบันทึกคะแนนและติดอันดับ',W/2,cy+62,13,C.muted,'center');
- if(!S.authReady){t('CHECKING SESSION...',W/2,cy+150,14,C.orange,'center');}
- else{
-  button(S.loginBusy?'SIGNING IN...':'G   SIGN IN WITH GOOGLE',47,cy+108,296,60,doSignIn,C.lime,{size:17,active:!S.loginBusy});
-  t('สมัครสมาชิก wiiwave.com ให้อัตโนมัติ (listener)',W/2,cy+190,12,C.white,'center');
-  t('ชื่อและคะแนนของคุณจะแสดงบนอันดับของเพลง',W/2,cy+212,12,C.muted,'center');
- }
- if(S.loginError){
-  const lines=wrapText(S.loginError,38);
-  lines.forEach((ln,i)=>t(ln,W/2,cy+244+i*17,12,C.red,'center'));
- }
- button('◀  BACK',117,H-70,156,42,()=>go('home'),C.blue,{size:15});
+ if(!S.authReady)t('CHECKING SESSION...',W/2,Math.round(H*.4),14,C.orange,'center');
 }
 function wrapText(text,max){const out=[];let line='';for(const ch of String(text)){line+=ch;if(line.length>=max){out.push(line);line='';}}if(line)out.push(line);return out.slice(0,3);}
 const MEDALS={1:['#ffd34d','#a8771d'],2:['#e3e9ee','#7c8791'],3:['#e8a068','#8a5326']};
@@ -641,6 +692,8 @@ function draw(now){
  uiScale=1;uiOffsetX=0;uiOffsetY=0;
  const playing=S.scene==='game'||S.scene==='pause';
  document.body.classList.toggle('is-playing',playing);
+ const showLogin=S.scene==='login'&&S.authReady;
+ if(lp.panel.hidden===showLogin)lp.panel.hidden=!showLogin;
  if(S.scene==='game')sceneGame(now);
  else if(S.scene==='pause')compactPause(now);
  else if(S.scene==='loading')compactLoading();
@@ -867,6 +920,7 @@ canvas.addEventListener('pointercancel',ev=>{
 const keys=['KeyD','KeyF','KeyJ','KeyK'];
 const arrowKeys={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
 window.addEventListener('keydown',e=>{
+ if(e.target instanceof HTMLInputElement)return; // typing in the login form: don't treat D F J K / arrows as game keys
  if(S.scene==='home'&&(e.code==='ArrowLeft'||e.code==='ArrowRight')){e.preventDefault();const d=e.code==='ArrowRight'?1:-1;slideTo(slide.idx+d,d);return;}
  if(S.scene==='songs'&&(e.code==='ArrowLeft'||e.code==='ArrowRight')){e.preventDefault();changeSong(e.code==='ArrowRight'?1:-1);return;}
  if(arrowKeys[e.code]&&S.scene==='game'){e.preventDefault();if(!e.repeat)hitSwipe(arrowKeys[e.code]);return;}
@@ -876,9 +930,9 @@ window.addEventListener('keydown',e=>{
  if(e.code==='Escape'||e.code==='Space'){
   if(['game','pause'].includes(S.scene)){e.preventDefault();S.scene==='game'?pauseGame():resumeGame();}
  }
- if(e.code==='Enter' && !e.repeat){if(S.scene==='login'&&S.authReady)doSignIn();else if(S.scene==='home')startFromHome();else if(S.scene==='songs')go('preplay');else if(S.scene==='preplay')startGame();else if(S.scene==='results'||S.scene==='gameover')startGame();}
+ if(e.code==='Enter' && !e.repeat){if(S.scene==='login')return;else if(S.scene==='home')startFromHome();else if(S.scene==='songs')go('preplay');else if(S.scene==='preplay')startGame();else if(S.scene==='results'||S.scene==='gameover')startGame();}
 });
-window.addEventListener('keyup',e=>{if(keys.includes(e.code))releaseLane(keys.indexOf(e.code));});
+window.addEventListener('keyup',e=>{if(e.target instanceof HTMLInputElement)return;if(keys.includes(e.code))releaseLane(keys.indexOf(e.code));});
 window.addEventListener('blur',()=>{if(S.scene==='game')pauseGame();stopPreview();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&S.scene==='game')pauseGame();});
 audio.addEventListener('ended',()=>finishGame());

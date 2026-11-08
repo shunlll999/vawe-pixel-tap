@@ -22,3 +22,26 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.2;ba
  body.is-playing .machine{overflow:hidden;}
  body.is-playing .machine canvas{min-height:0;touch-action:none;}
 }
+
+/* Login overlay (real inputs so mobile keyboards work); sits over the canvas inside .machine */
+.login-panel{position:absolute;inset:0;z-index:5;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:78px 16px 24px;display:flex;justify-content:center;align-items:flex-start;font-family:ui-monospace,'SFMono-Regular',Consolas,'Sarabun',Tahoma,sans-serif;touch-action:pan-y;user-select:auto;-webkit-user-select:auto}
+.login-panel[hidden]{display:none}
+.login-card{width:100%;max-width:340px;margin:auto;background:#191d22;border:3px solid #464e4e;box-shadow:5px 5px 0 #06060c;padding:18px 16px 16px;display:flex;flex-direction:column;gap:10px}
+.login-title{text-align:center;font-weight:900;font-size:20px;color:#f4f4e9;letter-spacing:1px}
+.login-sub,.login-note{margin:0;text-align:center;font-size:12px;line-height:1.5;color:#9fa9b5}
+.login-note{font-size:11px}
+.lp-btn{font:inherit;font-weight:900;font-size:15px;color:#f4f4e9;background:#0b0e13;border:3px solid #a5ff48;padding:12px 10px;cursor:pointer;width:100%}
+.lp-btn:disabled{opacity:.5;cursor:wait}
+.lp-btn:active{transform:translateY(2px)}
+.lp-back{border-color:#61e4fb;font-size:13px;padding:9px}
+.lp-submit{background:#a5ff48;color:#080911}
+.lp-or{display:flex;align-items:center;gap:8px;color:#9fa9b5;font-size:11px}
+.lp-or::before,.lp-or::after{content:'';flex:1;height:2px;background:#323747}
+.lp-tabs{display:flex;gap:6px}
+.lp-tab{flex:1;font:inherit;font-weight:900;font-size:13px;padding:8px;color:#9fa9b5;background:#10141a;border:2px solid #323747;cursor:pointer}
+.lp-tab.on{color:#080911;background:#61e4fb;border-color:#61e4fb}
+#emailForm{display:flex;flex-direction:column;gap:8px}
+.lp-input{font:inherit;font-size:16px;/* 16px stops iOS zooming on focus */color:#f4f4e9;background:#0b0e13;border:2px solid #323747;padding:11px 10px;width:100%;border-radius:0;outline:none}
+.lp-input:focus{border-color:#a5ff48}
+.lp-input[hidden]{display:none}
+.login-msg{margin:0;min-height:1em;text-align:center;font-size:12px;line-height:1.5;color:#ff596d;word-break:break-word}

@@ -40,6 +40,28 @@
       <div class="badge-row" aria-hidden="true"><span>VAWE / ARCADE</span><span>BUILD 0.6 — GATEWAY</span></div>
       <div class="machine" id="gameContainer">
         <canvas id="game" width="390" height="844" aria-label="VAWE TAP pixel art rhythm game. Use keys D F J K or touch the lanes."></canvas>
+        <div id="loginPanel" class="login-panel" hidden>
+          <div class="login-card">
+            <div class="login-title">SIGN IN TO PLAY</div>
+            <p class="login-sub">เข้าสู่ระบบก่อนเล่น เพื่อบันทึกคะแนนและติดอันดับ</p>
+            <button type="button" id="googleBtn" class="lp-btn lp-google">G &nbsp; SIGN IN WITH GOOGLE</button>
+            <div class="lp-or"><span>หรือ ใช้อีเมล</span></div>
+            <div class="lp-tabs" role="tablist">
+              <button type="button" class="lp-tab on" data-mode="login" role="tab">LOGIN</button>
+              <button type="button" class="lp-tab" data-mode="register" role="tab">REGISTER</button>
+            </div>
+            <form id="emailForm" novalidate>
+              <input id="afName" class="lp-input" type="text" placeholder="ชื่อที่แสดงบนอันดับ" autocomplete="nickname" maxlength="30" hidden />
+              <input id="afEmail" class="lp-input" type="email" placeholder="อีเมล" autocomplete="email" inputmode="email" />
+              <input id="afPass" class="lp-input" type="password" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัว)" autocomplete="current-password" />
+              <input id="afPass2" class="lp-input" type="password" placeholder="ยืนยันรหัสผ่าน" autocomplete="new-password" hidden />
+              <button type="submit" id="afSubmit" class="lp-btn lp-submit">LOGIN</button>
+            </form>
+            <p id="loginMsg" class="login-msg" role="alert"></p>
+            <p class="login-note">สมัครสมาชิก wiiwave.com ให้อัตโนมัติ · ชื่อและคะแนนจะแสดงบนอันดับของเพลง</p>
+            <button type="button" id="loginBack" class="lp-btn lp-back">◀ BACK</button>
+          </div>
+        </div>
         <div id="error" class="error" hidden role="alert"></div>
       </div>
       <div class="footer-hint">♪ AUDIO SYNC <span>●</span> TOUCH · SWIPE / D F J K · ARROWS</div>
