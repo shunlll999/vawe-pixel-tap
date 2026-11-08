@@ -55,7 +55,12 @@ S.board={status:'idle',data:null,newBest:false,error:''};
 setTokenGetter(getIdToken);
 // Called once a Firebase user is ready: registers the wiiwave.com member (listener) and moves on.
 async function afterSignIn(user){
- S.user={uid:user.uid,name:user.displayName||user.email||'Player',photo:user.photoURL||null};
+ // Fresh verification status (they may have verified on wiiwave.com since last time).
+ try{await user.reload();}catch{}
+ // Members can play right away without verifying. Verified → show their name; not verified → show their email.
+ const verified=user.emailVerified===true;
+ const label=verified?(user.displayName||user.email):(user.email||user.displayName);
+ S.user={uid:user.uid,name:label||'Player',verified,photo:verified?(user.photoURL||null):null};
  try{await registerMember();}catch(e){
   if(e.status===403){setLoginMsg(e.message);signOutUser();S.user=null;return;}
  }
