@@ -371,6 +371,39 @@ function compactHeader(title,right=''){
  if(right)t(right,370,27,10,C.muted,'right');
  px(19,62,W-38,2,'#42494b');zone(9,7,52,52,()=>go('home'));
 }
+// ── Home cover slideshow: covers slide and loop forever; START GAME plays the visible song ──
+const SLIDE_MS=3200, SLIDE_ANIM=450;
+const slide={idx:0,from:0,dir:1,t0:0};
+const arts={}; // songId -> pixelated cover
+function slideTo(i,dir,now=performance.now()){
+ const n=S.songs.length;if(n<1)return;
+ slide.from=slide.idx;slide.idx=(i+n)%n;slide.dir=dir;slide.t0=now;
+}
+function syncSlideToSong(){const i=S.songs.indexOf(S.song);if(i>=0){slide.idx=slide.from=i;slide.t0=performance.now();}}
+function drawArt(img,x,y,w,h){
+ if(!img){px(x,y,w,h,'#263028');t('♫',x+w/2,y+h/2-30,64,C.lime,'center');return;}
+ ctx.imageSmoothingEnabled=false;ctx.drawImage(img,Math.round(x),Math.round(y),Math.ceil(w),Math.ceil(h));
+}
+function artOf(song){return arts[song.id]||(song===S.song?S.cover:null);}
+function drawSlideshow(x,y,w,now){
+ const n=S.songs.length;if(!n)return null;
+ if(n>1&&now-slide.t0>SLIDE_MS)slideTo(slide.idx+1,1,now);
+ const p=Math.min(1,(now-slide.t0)/SLIDE_ANIM),e=p*p*(3-2*p);
+ ctx.save();ctx.beginPath();ctx.rect(x,y,w,w);ctx.clip();
+ if(p<1&&slide.from!==slide.idx){
+  drawArt(artOf(S.songs[slide.from]),x-slide.dir*e*w,y,w,w);
+  drawArt(artOf(S.songs[slide.idx]),x+slide.dir*(1-e)*w,y,w,w);
+ }else drawArt(artOf(S.songs[slide.idx]),x,y,w,w);
+ ctx.restore();
+ // page dots
+ if(n>1){const gap=14,x0=x+w/2-((n-1)*gap)/2;for(let i=0;i<n;i++){px(x0+i*gap-4,y+w-16,8,8,i===slide.idx?C.lime:'#ffffff55');}}
+ return S.songs[p>=.5?slide.idx:slide.from];
+}
+function startFromHome(){
+ const song=S.songs[slide.idx];
+ if(song&&song!==S.song)prepareSong(song);
+ go('songs');
+}
 function compactHome(now){
  bg('home',now);
  t('VAWE',24,14,36,C.lime,'left',true);
@@ -384,13 +417,13 @@ function compactHome(now){
  const cardY=upper+Math.max(0,(available-cardH)/2);
  const coverY=cardY+10,coverX=(W-cover)/2;
  panel(27,cardY,336,cardH,'#191d22','#464e4e');
- drawCover(coverX,coverY,cover,cover,true);
- px(coverX,coverY,101,23,C.lime);t('DEMO #001',coverX+9,coverY+5,10,C.ink);
+ const shown=drawSlideshow(coverX,coverY,cover,now)||S.song;
+ px(coverX,coverY,118,23,C.lime);t('TRACK '+String(slide.idx+1).padStart(2,'0')+'/'+String(S.songs.length).padStart(2,'0'),coverX+9,coverY+5,10,C.ink);
  const titleY=coverY+cover+11;
- t(S.song?.title||'รับครับพี่',W/2,titleY,21,C.white,'center',true);
- t((S.song?.artist||'wachii').toUpperCase()+'  •  '+(S.song?.bpm||130)+' BPM  •  '+fmtTime(S.song?.duration),W/2,titleY+30,11,C.muted,'center');
+ t(shown?.title||'',W/2,titleY,21,C.white,'center',true);
+ t((shown?.artist||'').toUpperCase()+'  •  '+(shown?.bpm||0)+' BPM  •  '+fmtTime(shown?.duration),W/2,titleY+30,11,C.muted,'center');
  t('HIT THE BEAT. KEEP THE COMBO.',W/2,taglineY,12,C.orange,'center');
- button('▶  START GAME',25,startY,340,56,()=>go('songs'),C.lime,{size:21});
+ button('▶  START GAME',25,startY,340,56,startFromHome,C.lime,{size:21});
  button('⚙  TIMING / SETTINGS',55,settingsY,280,43,()=>go('settings'),C.blue,{size:15});
 }
 function compactSongs(now){
@@ -528,7 +561,7 @@ function tick(now){
  S.particles=S.particles.filter(p=>now-p.born<p.life);
  draw(now);requestAnimationFrame(tick);
 }
-function go(scene){if(S.scene==='game'&&scene!=='pause')audio.pause();S.scene=scene;}
+function go(scene){if(scene==='home')syncSlideToSong();if(S.scene==='game'&&scene!=='pause')audio.pause();S.scene=scene;}
 function effectiveTime(){return audio.currentTime+S.offsetMs/1000;}
 function resetRun(){
  S.notes=S.chart.notes.map(n=>({...n,status:'pending',hitGrade:null}));
@@ -684,6 +717,7 @@ function pointerRelease(ev){
  if(!initial)return;
  const {x,y}=coords(ev);
  const mdx=x-initial.x,mdy=y-initial.y;
+ if(S.scene==='home'&&Math.abs(mdx)>40&&Math.abs(mdx)>Math.abs(mdy)*1.5){slideTo(slide.idx+(mdx<0?1:-1),mdx<0?1:-1);return;}
  if(S.scene==='songs'&&Math.abs(mdx)>40&&Math.abs(mdx)>Math.abs(mdy)*1.5){changeSong(mdx<0?1:-1);return;}
  if(Math.hypot(mdx,mdy)>13)return;
  for(let i=clickZones.length-1;i>=0;i--){
@@ -701,6 +735,7 @@ canvas.addEventListener('pointercancel',ev=>{
 const keys=['KeyD','KeyF','KeyJ','KeyK'];
 const arrowKeys={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
 window.addEventListener('keydown',e=>{
+ if(S.scene==='home'&&(e.code==='ArrowLeft'||e.code==='ArrowRight')){e.preventDefault();const d=e.code==='ArrowRight'?1:-1;slideTo(slide.idx+d,d);return;}
  if(S.scene==='songs'&&(e.code==='ArrowLeft'||e.code==='ArrowRight')){e.preventDefault();changeSong(e.code==='ArrowRight'?1:-1);return;}
  if(arrowKeys[e.code]&&S.scene==='game'){e.preventDefault();if(!e.repeat)hitSwipe(arrowKeys[e.code]);return;}
  if(keys.includes(e.code)){
@@ -709,7 +744,7 @@ window.addEventListener('keydown',e=>{
  if(e.code==='Escape'||e.code==='Space'){
   if(['game','pause'].includes(S.scene)){e.preventDefault();S.scene==='game'?pauseGame():resumeGame();}
  }
- if(e.code==='Enter' && !e.repeat){if(S.scene==='home')go('songs');else if(S.scene==='songs')go('preplay');else if(S.scene==='preplay')startGame();else if(S.scene==='results'||S.scene==='gameover')startGame();}
+ if(e.code==='Enter' && !e.repeat){if(S.scene==='home')startFromHome();else if(S.scene==='songs')go('preplay');else if(S.scene==='preplay')startGame();else if(S.scene==='results'||S.scene==='gameover')startGame();}
 });
 window.addEventListener('keyup',e=>{if(keys.includes(e.code))releaseLane(keys.indexOf(e.code));});
 window.addEventListener('blur',()=>{if(S.scene==='game')pauseGame();});
@@ -749,6 +784,8 @@ async function boot(){
   S.songs=await getSongLibrary();
   await prepareSong(S.songs[0]);
   if(!S.chart)throw new Error('ไม่พบ Beat Chart ของเพลงแรก');
+  S.songs.forEach(sg=>loadImage(sg.coverUrl).then(img=>{if(img)arts[sg.id]=pixelate(img);}));
+  syncSlideToSong();
   S.scene='home';
  }catch(error){showError(new Error('เริ่มเกมไม่สำเร็จ: '+error.message+''));S.loadingMessage='CANNOT LOAD SONG';}
 }
