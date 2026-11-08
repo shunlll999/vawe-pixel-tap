@@ -9,7 +9,10 @@ import { onUser, getIdToken, signInWithGoogle, signOutUser, signInWithEmail, reg
 const W=390, MENU_H=844, LANES=4, FIELD_X=24, FIELD_W=342, LANE_W=FIELD_W/4;
 // VERSION 0.4: adaptive viewport menus, no overlapping blocks or forced aspect ratio.
 let H=844, FIELD_TOP=176, FIELD_BOTTOM=728, HIT_Y=653, PAD_Y=690, FOOTER_Y=748;
-const TRAVEL_SECONDS=1.78;
+// Fall speed is a fixed px/sec (tuned on the 844-tall layout) so note spacing looks identical on every screen;
+// a shorter/taller field just changes how long a note takes to travel.
+const NOTE_SPEED=(653-176+31)/1.78;
+let TRAVEL_SECONDS=1.78;
 let uiScale=1, uiOffsetX=0, uiOffsetY=0;
 const NOTE_W=74, NOTE_H=51, JUDGE_WINDOWS={perfect:.065, great:.115, good:.185};
 const C={ink:'#080911',panel:'#171b27',frame:'#323747',white:'#f4f4e9',muted:'#9fa9b5',lime:'#a5ff48',orange:'#ffb147',pink:'#ff6eb6',blue:'#61e4fb',red:'#ff596d',darkLime:'#456721'};
@@ -35,6 +38,7 @@ function resizeCanvas(){
  HIT_Y=H-191;
  PAD_Y=H-154;
  FOOTER_Y=H-96;
+ TRAVEL_SECONDS=(HIT_Y-FIELD_TOP+31)/NOTE_SPEED;
  ctx.imageSmoothingEnabled=false;
 }
 const resizeObserver=new ResizeObserver(resizeCanvas);
@@ -387,7 +391,7 @@ function drawNote(x,centerY,lane,type='tap',duration=0,dir=null){
  const y=Math.round(centerY-NOTE_H/2),color=LANE_COLORS[lane],x0=Math.round(x);
  // Large chunky 8-bit note, 86% of lane width. Sharp stepped corners, zero gradients.
  if(type==='hold' && duration>0){
-  const len=Math.round(duration*(HIT_Y-FIELD_TOP)/TRAVEL_SECONDS);
+  const len=Math.round(duration*NOTE_SPEED);
   const top=Math.max(FIELD_TOP,centerY-len);
   px(x0+24,top,NOTE_W-48,centerY-top,color+'9c');
   px(x0+29,top,NOTE_W-58,centerY-top,'#101721');
@@ -416,7 +420,7 @@ function drawNotes(){
   const delta=n.time-ct;
   if(delta>TRAVEL_SECONDS+.14)continue;
   if(delta<-.3 && n.status!=='holding')continue;
-  const mid=HIT_Y-delta*(HIT_Y-FIELD_TOP+31)/TRAVEL_SECONDS;
+  const mid=HIT_Y-delta*NOTE_SPEED;
   if(mid>FIELD_BOTTOM+50 || mid<FIELD_TOP-75)continue;
   const x=FIELD_X+n.lane*LANE_W+(LANE_W-NOTE_W)/2;
   drawNote(x,mid,n.lane,n.type,n.duration,n.dir);
@@ -648,9 +652,9 @@ function drawLeaderboard(x,y,w){
  if(b.status==='ready'&&b.data)t(b.data.total_players+(b.data.total_players===1?' PLAYER':' PLAYERS'),x+w,y,12,C.lime,'right');
  let yy=y+22;
  if(b.status==='loading'||b.status==='idle'){t('LOADING...',x+w/2,yy+30,13,C.orange,'center');return;}
- if(b.status==='error'){t('LEADERBOARD UNAVAILABLE',x+w/2,yy+30,12,C.red,'center');return;}
+ if(b.status==='error'){t('LEADERBOARD UNAVAILABLE',x+w/2,yy+30,12,C.red,'center');t(clip(b.error||'',32),x+w/2,yy+52,10,C.muted,'center');return;}
  const d=b.data;
- if(!d.top.length){t('NO SCORES YET — BE THE FIRST!',x+w/2,yy+30,12,C.muted,'center');}
+ if(!d.top.length){t('NO SCORES YET — BE THE FIRST!',x+w/2,yy+14,12,C.muted,'center');yy+=44;}
  d.top.forEach(r=>{
   if(r.is_me)px(x-6,yy-4,w+12,32,'#2a3a1c');
   drawMedal(x,yy+1,r.rank);
