@@ -76,14 +76,14 @@ onUser(async user=>{
 // ── Login panel (HTML overlay: real inputs so phone keyboards work) ──
 const lp={panel:document.querySelector('#loginPanel'),msg:document.querySelector('#loginMsg'),form:document.querySelector('#emailForm'),
  name:document.querySelector('#afName'),email:document.querySelector('#afEmail'),pass:document.querySelector('#afPass'),pass2:document.querySelector('#afPass2'),
- submit:document.querySelector('#afSubmit'),google:document.querySelector('#googleBtn'),back:document.querySelector('#loginBack'),tabs:[...document.querySelectorAll('.lp-tab')]};
+ submit:document.querySelector('#afSubmit'),forgot:document.querySelector('#forgotLink'),google:document.querySelector('#googleBtn'),back:document.querySelector('#loginBack'),tabs:[...document.querySelectorAll('.lp-tab')]};
 let loginMode='login';
 function setLoginMsg(text){lp.msg.textContent=text||'';}
 function setLoginMode(mode){
  loginMode=mode;
  lp.tabs.forEach(b=>b.classList.toggle('on',b.dataset.mode===mode));
  const reg=mode==='register';
- lp.name.hidden=!reg;lp.pass2.hidden=!reg;
+ lp.name.hidden=!reg;lp.pass2.hidden=!reg;lp.forgot.hidden=reg;
  lp.pass.autocomplete=reg?'new-password':'current-password';
  lp.submit.textContent=reg?'CREATE ACCOUNT':'LOGIN';
  setLoginMsg('');
@@ -103,6 +103,8 @@ function authErrorText(e){
 }
 lp.tabs.forEach(b=>b.addEventListener('click',()=>setLoginMode(b.dataset.mode)));
 lp.back.addEventListener('click',()=>go('home'));
+// Password reset lives on wiiwave.com: send them there with their email pre-filled.
+lp.forgot.addEventListener('click',()=>{const e=lp.email.value.trim();lp.forgot.href='https://wiiwave.com/forgot-password'+(e?'?email='+encodeURIComponent(e):'');});
 lp.google.addEventListener('click',()=>doSignIn());
 lp.form.addEventListener('submit',async ev=>{
  ev.preventDefault();
