@@ -557,11 +557,27 @@ function draw(now){
 function tick(now){
  const dt=Math.min(100,now-lastFrame);lastFrame=now;
  if(S.scene==='game')updateGame(now);
+ if(S.scene!=='songs'&&!previewAudio.paused)stopPreview();
  S.shake=Math.max(0,S.shake-dt*.18);
  S.particles=S.particles.filter(p=>now-p.born<p.life);
  draw(now);requestAnimationFrame(tick);
 }
-function go(scene){if(scene==='home')syncSlideToSong();if(S.scene==='game'&&scene!=='pause')audio.pause();S.scene=scene;}
+// ── 15s song preview on the song-select screen ──
+const previewAudio=new Audio();previewAudio.loop=true;previewAudio.preload='auto';
+let previewSongId=null;
+function playPreview(song){
+ if(!song||S.scene!=='songs')return;
+ if(previewSongId===song.id&&!previewAudio.paused)return;
+ previewSongId=song.id;
+ // Older songs have no cut preview yet: fall back to the start of the full track.
+ const src=song.previewUrl||song.audioUrl;
+ if(previewAudio.src!==src)previewAudio.src=src;
+ previewAudio.currentTime=0;previewAudio.volume=Math.min(1,S.volume*.9);
+ const started=previewAudio.play();
+ if(started&&started.catch)started.catch(()=>{previewSongId=null;}); // blocked until a user gesture: retried on next interaction
+}
+function stopPreview(){if(!previewAudio.paused)previewAudio.pause();previewSongId=null;}
+function go(scene){if(scene==='songs')setTimeout(()=>playPreview(S.song),0);else stopPreview();if(scene==='home')syncSlideToSong();if(S.scene==='game'&&scene!=='pause')audio.pause();S.scene=scene;}
 function effectiveTime(){return audio.currentTime+S.offsetMs/1000;}
 function resetRun(){
  S.notes=S.chart.notes.map(n=>({...n,status:'pending',hitGrade:null}));
@@ -579,7 +595,7 @@ function startGame(){
 
 function pauseGame(){if(S.scene!=='game')return;audio.pause();S.scene='pause';S.pressed.clear();}
 async function resumeGame(){S.scene='game';try{await audio.play();}catch(error){showError(error);}}
-function exitGame(){audio.pause();audio.currentTime=0;S.pressed.clear();S.scene='songs';}
+function exitGame(){audio.pause();audio.currentTime=0;S.pressed.clear();go('songs');}
 function finishGame(){
  if(S.scene!=='game')return;
  if(S.life<=0){failGame();return;}
@@ -747,7 +763,7 @@ window.addEventListener('keydown',e=>{
  if(e.code==='Enter' && !e.repeat){if(S.scene==='home')startFromHome();else if(S.scene==='songs')go('preplay');else if(S.scene==='preplay')startGame();else if(S.scene==='results'||S.scene==='gameover')startGame();}
 });
 window.addEventListener('keyup',e=>{if(keys.includes(e.code))releaseLane(keys.indexOf(e.code));});
-window.addEventListener('blur',()=>{if(S.scene==='game')pauseGame();});
+window.addEventListener('blur',()=>{if(S.scene==='game')pauseGame();stopPreview();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&S.scene==='game')pauseGame();});
 audio.addEventListener('ended',()=>finishGame());
 audio.addEventListener('error',()=>{if(S.scene==='game')showError(new Error('ไม่สามารถโหลดไฟล์เสียงได้ เพลงอาจถูกถอดออกหรือเครือข่ายมีปัญหา'));});
@@ -777,7 +793,9 @@ async function prepareSong(song){
 async function changeSong(delta){
  if(S.preparing||S.songs.length<2)return;
  const index=S.songs.indexOf(S.song);
- await prepareSong(S.songs[(index+delta+S.songs.length)%S.songs.length]);
+ const next=S.songs[(index+delta+S.songs.length)%S.songs.length];
+ playPreview(next);
+ await prepareSong(next);
 }
 async function boot(){
  try {

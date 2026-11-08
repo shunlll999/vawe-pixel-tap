@@ -25,6 +25,7 @@ function toSong(item, index) {
     duration: Number(item.duration_sec) || 0,
     color: LANE_COLORS[index % LANE_COLORS.length],
     audioUrl: item.audio_url,
+    previewUrl: item.preview_url || '', // 15s clip cut at beat-generation time (empty for older songs)
     coverUrl: item.cover_url || '',
     pixelCoverUrl: item.cover_url || '',
     difficulties: item.difficulties || [],
