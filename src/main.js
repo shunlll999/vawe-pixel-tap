@@ -1,6 +1,6 @@
-import { getSongLibrary, getChart, setTokenGetter, registerMember, getLeaderboard, submitScore, recordPlay } from './data.js';
+import { getSongLibrary, getChart, setTokenGetter, registerMember, getLeaderboard, submitScore, recordPlay, sendVerification } from './data.js';
 import { track } from './analytics.js';
-import { onUser, getIdToken, signInWithGoogle, signOutUser, signInWithEmail, registerWithEmail } from './auth.js';
+import { onUser, getIdToken, signInWithGoogle, signOutUser, signInWithEmail, registerWithEmail, currentUser as getCurrentUser } from './auth.js';
 
 // VAWE TAP • responsive canvas with a constant logical 390px width.
 // Gameplay height and hit-line positions follow the available screen height.
@@ -117,7 +117,12 @@ lp.form.addEventListener('submit',async ev=>{
   if(password.length<6){setLoginMsg('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');return;}
   if(password!==lp.pass2.value){setLoginMsg('รหัสผ่านไม่ตรงกัน');return;}
   setLoginBusy(true);S.registering=true;
-  try{const user=await registerWithEmail(name,email,password);S.registering=false;await afterSignIn(user);}
+  try{
+   const user=await registerWithEmail(name,email,password);S.registering=false;
+   // Prove the address is real: send the verification email now. Playing does not wait for it.
+   sendVerification().then(()=>showNotice('ส่งอีเมลยืนยันไปที่ '+email+' แล้ว — เล่นได้เลย ยืนยันทีหลังได้'),()=>{});
+   await afterSignIn(user);
+  }
   catch(e){S.registering=false;setLoginMsg(authErrorText(e));}
   finally{S.registering=false;setLoginBusy(false);}
  }else{
@@ -137,6 +142,24 @@ async function doSignIn(){
   else setLoginMsg('เข้าสู่ระบบไม่สำเร็จ ลองใหม่อีกครั้ง');
  }finally{setLoginBusy(false);}
 }
+// Tapped "VERIFY EMAIL" on the home screen: resend the message (the gateway rate-limits repeats).
+async function resendVerification(){
+ try{
+  const r=await sendVerification();
+  showNotice(r?.alreadyVerified?'อีเมลนี้ยืนยันแล้ว':'ส่งอีเมลยืนยันแล้ว ตรวจกล่องจดหมาย (และโฟลเดอร์สแปม)');
+  if(r?.alreadyVerified)refreshVerification();
+ }catch(e){showNotice(e.status===429?'ส่งบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่':'ส่งอีเมลไม่สำเร็จ ลองใหม่อีกครั้ง');}
+}
+// Coming back from the verification link in another tab: re-read the status so the name replaces the email.
+async function refreshVerification(){
+ if(!S.user||S.user.verified)return;
+ const u=getCurrentUser();
+ if(!u)return;
+ try{await u.reload();}catch{return;}
+ if(u.emailVerified){S.user.verified=true;S.user.name=u.displayName||u.email;S.user.photo=u.photoURL||null;showNotice('ยืนยันอีเมลเรียบร้อยแล้ว ✓');}
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshVerification();});
+window.addEventListener('focus',()=>refreshVerification());
 function signOutAndHome(){signOutUser();S.user=null;go('home');}
 
 let lastFrame=performance.now();
@@ -523,8 +546,9 @@ function compactHome(now){
  const titleY=coverY+cover+11;
  t(shown?.title||'',W/2,titleY,21,C.white,'center',true);
  t((shown?.artist||'').toUpperCase()+'  •  '+(shown?.bpm||0)+' BPM  •  '+fmtTime(shown?.duration),W/2,titleY+30,11,C.muted,'center');
- t(S.user?('♪ '+clip(S.user.name,18)):'HIT THE BEAT. KEEP THE COMBO.',S.user?24:W/2,taglineY,12,S.user?C.lime:C.orange,S.user?'left':'center');
+ t(S.user?('♪ '+clip(S.user.name,13)):'HIT THE BEAT. KEEP THE COMBO.',S.user?24:W/2,taglineY,12,S.user?C.lime:C.orange,S.user?'left':'center');
  if(S.user){t('SIGN OUT',W-24,taglineY,12,C.muted,'right');zone(W-110,taglineY-8,100,28,signOutAndHome);}
+ if(S.user&&!S.user.verified){t('✉ VERIFY EMAIL',W/2+18,taglineY,12,C.orange,'center');zone(W/2-62,taglineY-8,160,28,resendVerification);}
  button('▶  START GAME',25,startY,340,56,startFromHome,C.lime,{size:21});
  button('⚙  TIMING / SETTINGS',55,settingsY,280,43,()=>go('settings'),C.blue,{size:15});
 }
@@ -789,6 +813,9 @@ function failGame(){
  S.scene='gameover';
  saveResult(true);
 }
+const noticeEl=document.querySelector('#notice');
+let noticeTimer=0;
+function showNotice(text,ms=7000){noticeEl.hidden=false;noticeEl.textContent=text;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>{noticeEl.hidden=true;},ms);}
 function showError(error){console.error(error);errorEl.hidden=false;errorEl.textContent=error.message||String(error);setTimeout(()=>{errorEl.hidden=true;},6500);}
 function emitParticles(lane,grade){
  const now=performance.now(),center=FIELD_X+(lane+.5)*LANE_W;

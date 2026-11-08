@@ -128,3 +128,6 @@ export const submitScore = (song, difficulty, r) =>
 /** Tell the gateway a song was started from the game (counted as a play, flagged as "via game" for the artist). */
 export const recordPlay = (song, difficulty) =>
   authed(`/tap/songs/${encodeURIComponent(song.id)}/play`, { method: 'POST', body: JSON.stringify({ difficulty: API_DIFF[difficulty] }) });
+
+/** Ask the gateway to (re)send the wiiwave.com email-verification message (same mail as the website). */
+export const sendVerification = () => authed('/users/me/send-verification', { method: 'POST', body: '{}' });
