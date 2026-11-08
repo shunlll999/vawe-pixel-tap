@@ -420,9 +420,15 @@ function drawNotes(){
   const delta=n.time-ct;
   if(delta>TRAVEL_SECONDS+.14)continue;
   if(delta<-.3 && n.status!=='holding')continue;
+  const x=FIELD_X+n.lane*LANE_W+(LANE_W-NOTE_W)/2;
+  if(n.status==='holding'){
+   // Held: the head stays on the hit line and the tail drains until the hold ends.
+   const left=n.time+n.duration-ct;
+   if(left>0)drawNote(x,HIT_Y,n.lane,n.type,left,n.dir);
+   continue;
+  }
   const mid=HIT_Y-delta*NOTE_SPEED;
   if(mid>FIELD_BOTTOM+50 || mid<FIELD_TOP-75)continue;
-  const x=FIELD_X+n.lane*LANE_W+(LANE_W-NOTE_W)/2;
   drawNote(x,mid,n.lane,n.type,n.duration,n.dir);
  }
 }
@@ -899,7 +905,8 @@ function releaseLane(lane){
  const now=effectiveTime();
  for(const n of S.notes){
   if(n.lane===lane && n.status==='holding' && now<n.time+n.duration-.15){
-    n.status='miss';S.combo=0;S.miss++;S.life=Math.max(0,S.life-3);
+    // The hold head was already judged (PERFECT/GREAT/GOOD) when it started: breaking it early costs combo + life but is not a second judgement.
+    n.status='miss';S.combo=0;S.life=Math.max(0,S.life-3);
     S.lastHit={label:'MISS',when:performance.now()};
     if(S.life<=0){failGame();return;}
   }
