@@ -80,3 +80,47 @@ export async function getChart(song, difficulty) {
   notes.sort((a, b) => a.time - b.time);
   return { ...chart, difficulty, notes };
 }
+
+// ── Signed-in calls (Bearer Firebase ID token) ──
+let tokenGetter = null;
+export const setTokenGetter = (fn) => { tokenGetter = fn; };
+
+async function authed(path, options = {}) {
+  const token = tokenGetter ? await tokenGetter() : null;
+  let response;
+  try {
+    response = await fetch(GATEWAY_URL + path, {
+      ...options,
+      headers: {
+        Accept: 'application/json',
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+  } catch {
+    throw new Error('เชื่อมต่อ gateway ไม่ได้');
+  }
+  if (!response.ok) {
+    let message = `HTTP ${response.status}`;
+    try { const b = await response.json(); if (b?.message) message = Array.isArray(b.message) ? b.message.join(', ') : b.message; } catch {}
+    const err = new Error(message);
+    err.status = response.status;
+    throw err;
+  }
+  return response.json();
+}
+
+/** First call after sign-in: the gateway auto-creates the wiiwave.com account (role: listener) if it is new. */
+export const registerMember = () => authed('/users/me');
+
+export const getLeaderboard = (song, difficulty) =>
+  authed(`/tap/songs/${encodeURIComponent(song.id)}/leaderboard?difficulty=${API_DIFF[difficulty]}`);
+
+export const submitScore = (song, difficulty, r) =>
+  authed('/tap/scores', {
+    method: 'POST',
+    body: JSON.stringify({
+      trackId: song.id, difficulty: API_DIFF[difficulty],
+      score: r.score, maxCombo: r.maxCombo, perfect: r.perfect, great: r.great, good: r.good, miss: r.miss,
+    }),
+  });

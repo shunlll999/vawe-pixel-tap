@@ -1,4 +1,5 @@
-import { getSongLibrary, getChart } from './data.js';
+import { getSongLibrary, getChart, setTokenGetter, registerMember, getLeaderboard, submitScore } from './data.js';
+import { onUser, getIdToken, signInWithGoogle, signOutUser } from './auth.js';
 
 // VAWE TAP • responsive canvas with a constant logical 390px width.
 // Gameplay height and hit-line positions follow the available screen height.
@@ -47,6 +48,32 @@ const S={scene:'loading',songs:[],song:null,cover:null,originalCover:null,mode:'
 try { S.offsetMs=Number(localStorage.getItem('vawe.audioOffsetMs')||0)||0; } catch {}
 try { S.volume=Math.max(.2,Math.min(1,Number(localStorage.getItem('vawe.volume')||.85))); } catch {}
 let clickZones=[];
+// ── Player account (Google) + leaderboard ──
+S.user=null;S.authReady=false;S.afterLogin='songs';S.loginBusy=false;S.loginError='';
+S.board={status:'idle',data:null,newBest:false,error:''};
+setTokenGetter(getIdToken);
+onUser(async user=>{
+ S.authReady=true;
+ if(!user){S.user=null;return;}
+ S.user={uid:user.uid,name:user.displayName||user.email||'Player',photo:user.photoURL||null};
+ try{await registerMember();}catch(e){
+  if(e.status===403){S.loginError=e.message;signOutUser();S.user=null;return;}
+ }
+ if(S.scene==='login')go(S.afterLogin||'songs');
+});
+async function doSignIn(){
+ if(S.loginBusy)return;
+ S.loginBusy=true;S.loginError='';
+ try{await signInWithGoogle();}catch(e){
+  const code=e?.code||'';
+  if(code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request'){/* user changed their mind */}
+  else if(code==='auth/unauthorized-domain')S.loginError='โดเมนนี้ยังไม่ได้รับอนุญาตใน Firebase Auth (เพิ่ม game.wiiwave.com)';
+  else if(code==='auth/popup-blocked')S.loginError='เบราว์เซอร์บล็อกหน้าต่างล็อกอิน กรุณาอนุญาต pop-up แล้วลองใหม่';
+  else S.loginError='เข้าสู่ระบบไม่สำเร็จ ลองใหม่อีกครั้ง';
+ }finally{S.loginBusy=false;}
+}
+function signOutAndHome(){signOutUser();S.user=null;go('home');}
+
 let lastFrame=performance.now();
 
 function px(x,y,w,h,color){ctx.fillStyle=color;ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h));}
@@ -422,7 +449,8 @@ function compactHome(now){
  const titleY=coverY+cover+11;
  t(shown?.title||'',W/2,titleY,21,C.white,'center',true);
  t((shown?.artist||'').toUpperCase()+'  •  '+(shown?.bpm||0)+' BPM  •  '+fmtTime(shown?.duration),W/2,titleY+30,11,C.muted,'center');
- t('HIT THE BEAT. KEEP THE COMBO.',W/2,taglineY,12,C.orange,'center');
+ t(S.user?('♪ '+clip(S.user.name,18)):'HIT THE BEAT. KEEP THE COMBO.',S.user?24:W/2,taglineY,12,S.user?C.lime:C.orange,S.user?'left':'center');
+ if(S.user){t('SIGN OUT',W-24,taglineY,12,C.muted,'right');zone(W-110,taglineY-8,100,28,signOutAndHome);}
  button('▶  START GAME',25,startY,340,56,startFromHome,C.lime,{size:21});
  button('⚙  TIMING / SETTINGS',55,settingsY,280,43,()=>go('settings'),C.blue,{size:15});
 }
@@ -492,22 +520,88 @@ function compactSettings(now){
  t('Song audio is the source of truth.',W/2,Math.max(450,btnY-31),11,C.muted,'center');
  button('✓  DONE',32,btnY,326,58,()=>go('preplay'),C.lime,{size:21});
 }
+function compactLogin(now){
+ bg('home',now);
+ t('VAWE',24,14,36,C.lime,'left',true);t('TAP',W-24,15,34,C.white,'right',true);
+ px(24,66,342,3,C.lime);
+ const cy=Math.max(110,Math.round(H*.2));
+ panel(27,cy,336,300,'#191d22','#464e4e');
+ t('SIGN IN TO PLAY',W/2,cy+22,22,C.white,'center',true);
+ t('เข้าสู่ระบบก่อนเล่น เพื่อบันทึกคะแนนและติดอันดับ',W/2,cy+62,13,C.muted,'center');
+ if(!S.authReady){t('CHECKING SESSION...',W/2,cy+150,14,C.orange,'center');}
+ else{
+  button(S.loginBusy?'SIGNING IN...':'G   SIGN IN WITH GOOGLE',47,cy+108,296,60,doSignIn,C.lime,{size:17,active:!S.loginBusy});
+  t('สมัครสมาชิก wiiwave.com ให้อัตโนมัติ (listener)',W/2,cy+190,12,C.white,'center');
+  t('ชื่อและคะแนนของคุณจะแสดงบนอันดับของเพลง',W/2,cy+212,12,C.muted,'center');
+ }
+ if(S.loginError){
+  const lines=wrapText(S.loginError,38);
+  lines.forEach((ln,i)=>t(ln,W/2,cy+244+i*17,12,C.red,'center'));
+ }
+ button('◀  BACK',117,H-70,156,42,()=>go('home'),C.blue,{size:15});
+}
+function wrapText(text,max){const out=[];let line='';for(const ch of String(text)){line+=ch;if(line.length>=max){out.push(line);line='';}}if(line)out.push(line);return out.slice(0,3);}
+const MEDALS={1:['#ffd34d','#a8771d'],2:['#e3e9ee','#7c8791'],3:['#e8a068','#8a5326']};
+// Pixel medal: ranks 1-3 get gold / silver / bronze with ribbon, others a plain grey disc.
+function drawMedal(x,y,rank){
+ const m=MEDALS[rank];
+ if(m){
+  px(x+5,y-3,5,6,'#ff596d');px(x+12,y-3,5,6,'#61e4fb');
+  px(x+5,y+1,12,2,m[1]);
+  px(x+6,y+2,10,2,m[1]);px(x+2,y+5,18,14,m[1]);px(x+4,y+3,14,18,m[1]);
+  px(x+3,y+6,16,12,m[0]);px(x+5,y+4,12,16,m[0]);
+  px(x+6,y+6,4,3,'#ffffffb0');
+  t(String(rank),x+11,y+7,12,'#2a1c04','center');
+ }else{
+  px(x+3,y+4,16,14,'#3a414a');px(x+5,y+2,12,18,'#3a414a');
+  t('#'+rank,x+11,y+7,10,C.muted,'center');
+ }
+}
+function clip(str,n){str=String(str);return str.length>n?str.slice(0,n-1)+'…':str;}
+function drawLeaderboard(x,y,w){
+ const b=S.board;
+ t('LEADERBOARD · '+String(S.mode).toUpperCase(),x,y,12,C.muted);
+ if(b.status==='ready'&&b.data)t(b.data.total_players+(b.data.total_players===1?' PLAYER':' PLAYERS'),x+w,y,12,C.lime,'right');
+ let yy=y+22;
+ if(b.status==='loading'||b.status==='idle'){t('LOADING...',x+w/2,yy+30,13,C.orange,'center');return;}
+ if(b.status==='error'){t('LEADERBOARD UNAVAILABLE',x+w/2,yy+30,12,C.red,'center');return;}
+ const d=b.data;
+ if(!d.top.length){t('NO SCORES YET — BE THE FIRST!',x+w/2,yy+30,12,C.muted,'center');}
+ d.top.forEach(r=>{
+  if(r.is_me)px(x-6,yy-4,w+12,32,'#2a3a1c');
+  drawMedal(x,yy+1,r.rank);
+  t(clip(r.name,16),x+34,yy+4,14,r.is_me?C.lime:C.white);
+  t(r.score.toLocaleString('en-US'),x+w,yy+4,14,r.is_me?C.lime:C.orange,'right');
+  yy+=34;
+ });
+ yy+=6;px(x,yy,w,2,'#42494c');yy+=10;
+ if(d.me){
+  px(x-6,yy-4,w+12,32,'#1d2b33');
+  drawMedal(x,yy+1,d.me.rank);
+  t('YOU  '+clip(S.user?.name||'',12),x+34,yy+4,14,C.blue);
+  t('#'+d.me.rank+' / '+d.total_players,x+w,yy+4,14,C.blue,'right');
+ }else{
+  t(S.result?.failed?'FINISH THE SONG TO GET RANKED':'NOT RANKED YET',x+w/2,yy+6,12,C.muted,'center');
+ }
+}
 function compactResults(now){
  bg('home',now);
  const failed=S.scene==='gameover';
- t(failed?'GAME OVER':'TRACK COMPLETE',W/2,23,20,failed?C.red:C.lime,'center',true);
- const btnY=H-118,cardY=69,cardBottom=btnY-14;
+ t(failed?'GAME OVER':'TRACK COMPLETE',W/2,20,20,failed?C.red:C.lime,'center',true);
+ const btnY=H-118,cardY=52,cardBottom=btnY-10;
  panel(22,cardY,346,cardBottom-cardY,'#191d25',failed?C.red:'#475148');
  const {letter,accuracy}=grade();
- t(failed?'LIFE DEPLETED':'RANK',W/2,cardY+13,13,failed?C.red:C.muted,'center');
- t(failed?'F':letter,W/2,cardY+32,76,failed?C.red:letter==='S'?C.lime:letter==='A'?C.blue:C.orange,'center',true);
- const scoreY=cardY+136;
- t('FINAL SCORE',W/2,scoreY,13,C.muted,'center');
- t(S.score.toLocaleString('en-US'),W/2,scoreY+21,28,C.white,'center',true);
- px(43,scoreY+64,304,2,'#42494c');
- const data=[['ACCURACY',accuracy.toFixed(1)+'%'],['MAX COMBO',String(S.maxCombo)],['PERFECT',String(S.perfect)],['GREAT / GOOD',S.great+' / '+S.good],['MISS',String(S.miss)]];
- const rowsStart=scoreY+78,rowH=Math.max(23,Math.min(29,(cardBottom-rowsStart-10)/5));
- data.forEach(([label,v],i)=>{t(label,43,rowsStart+i*rowH,12,C.muted);t(v,346,rowsStart+i*rowH,14,i===4?C.red:C.white,'right')});
+ const color=failed?C.red:letter==='S'?C.lime:letter==='A'?C.blue:C.orange;
+ t(failed?'F':letter,60,cardY+8,56,color,'center',true);
+ t('FINAL SCORE',130,cardY+12,11,C.muted);
+ t(S.score.toLocaleString('en-US'),130,cardY+30,28,C.white,'left',true);
+ if(S.board.newBest)t('NEW BEST!',346,cardY+14,12,C.lime,'right');
+ else if(failed)t('LIFE DEPLETED',346,cardY+14,11,C.red,'right');
+ px(43,cardY+76,304,2,'#42494c');
+ const cells=[['ACC',accuracy.toFixed(1)+'%'],['COMBO',String(S.maxCombo)],['P/GR/GD',S.perfect+'/'+S.great+'/'+S.good],['MISS',String(S.miss)]];
+ cells.forEach(([label,v],i)=>{const cx=43+i*76+38;t(label,cx,cardY+86,10,C.muted,'center');t(v,cx,cardY+101,13,i===3?C.red:C.white,'center');});
+ px(43,cardY+124,304,2,'#42494c');
+ drawLeaderboard(43,cardY+134,304);
  button('↻  PLAY AGAIN',27,btnY,336,54,()=>startGame(),C.lime,{size:20});
  button('⌂  SONG SELECT',57,H-54,276,41,()=>go('songs'),C.blue,{size:16});
 }
@@ -549,6 +643,7 @@ function draw(now){
  else if(S.scene==='pause')compactPause(now);
  else if(S.scene==='loading')compactLoading();
  else if(S.scene==='home')compactHome(now);
+ else if(S.scene==='login')compactLogin(now);
  else if(S.scene==='songs')compactSongs(now);
  else if(S.scene==='preplay')compactPreplay(now);
  else if(S.scene==='settings')compactSettings(now);
@@ -577,10 +672,12 @@ function playPreview(song){
  if(started&&started.catch)started.catch(()=>{previewSongId=null;}); // blocked until a user gesture: retried on next interaction
 }
 function stopPreview(){if(!previewAudio.paused)previewAudio.pause();previewSongId=null;}
-function go(scene){if(scene==='songs')setTimeout(()=>playPreview(S.song),0);else stopPreview();if(scene==='home')syncSlideToSong();if(S.scene==='game'&&scene!=='pause')audio.pause();S.scene=scene;}
+function go(scene){if((scene==='songs'||scene==='preplay')&&!S.user){S.afterLogin=scene;scene='login';}
+ if(scene==='songs')setTimeout(()=>playPreview(S.song),0);else stopPreview();if(scene==='home')syncSlideToSong();if(S.scene==='game'&&scene!=='pause')audio.pause();S.scene=scene;}
 function effectiveTime(){return audio.currentTime+S.offsetMs/1000;}
 function resetRun(){
  S.notes=S.chart.notes.map(n=>({...n,status:'pending',hitGrade:null}));
+ S.board={status:'idle',data:null,newBest:false,error:''};
  S.score=0;S.combo=0;S.maxCombo=0;S.perfect=0;S.great=0;S.good=0;S.miss=0;S.life=100;S.result=null;S.lastHit=null;S.particles=[];S.shake=0;S.pressed.clear();S.pointerLanes.clear();
 }
 function startGame(){
@@ -596,6 +693,18 @@ function startGame(){
 function pauseGame(){if(S.scene!=='game')return;audio.pause();S.scene='pause';S.pressed.clear();}
 async function resumeGame(){S.scene='game';try{await audio.play();}catch(error){showError(error);}}
 function exitGame(){audio.pause();audio.currentTime=0;S.pressed.clear();go('songs');}
+// A finished song is saved to the leaderboard; a failed run only shows the board (it is never ranked).
+async function saveResult(failed){
+ const song=S.song,mode=S.mode;
+ S.board={status:'loading',data:null,newBest:false,error:''};
+ try{
+  if(failed){S.board={status:'ready',data:await getLeaderboard(song,mode),newBest:false,error:''};}
+  else{
+   const r=await submitScore(song,mode,{score:S.score,maxCombo:S.maxCombo,perfect:S.perfect,great:S.great,good:S.good,miss:S.miss});
+   S.board={status:'ready',data:r,newBest:!!r.new_best,error:''};
+  }
+ }catch(e){console.error(e);S.board={status:'error',data:null,newBest:false,error:e.message};}
+}
 function finishGame(){
  if(S.scene!=='game')return;
  if(S.life<=0){failGame();return;}
@@ -603,6 +712,7 @@ function finishGame(){
  // Count any missed notes after song ends, including all notes not reached by player.
  for(const n of S.notes)if(n.status==='pending'){n.status='miss';S.miss++;}
  S.result={score:S.score,combo:S.maxCombo,grade:grade(),failed:false};S.scene='results';
+ saveResult(false);
 }
 function failGame(){
  // One-way transition: stop the soundtrack, all note updates and input on this frame.
@@ -612,6 +722,7 @@ function failGame(){
  S.pressed.clear();S.pointerLanes.clear();
  S.result={score:S.score,combo:S.maxCombo,grade:grade(),failed:true};
  S.scene='gameover';
+ saveResult(true);
 }
 function showError(error){console.error(error);errorEl.hidden=false;errorEl.textContent=error.message||String(error);setTimeout(()=>{errorEl.hidden=true;},6500);}
 function emitParticles(lane,grade){
@@ -760,7 +871,7 @@ window.addEventListener('keydown',e=>{
  if(e.code==='Escape'||e.code==='Space'){
   if(['game','pause'].includes(S.scene)){e.preventDefault();S.scene==='game'?pauseGame():resumeGame();}
  }
- if(e.code==='Enter' && !e.repeat){if(S.scene==='home')startFromHome();else if(S.scene==='songs')go('preplay');else if(S.scene==='preplay')startGame();else if(S.scene==='results'||S.scene==='gameover')startGame();}
+ if(e.code==='Enter' && !e.repeat){if(S.scene==='login'&&S.authReady)doSignIn();else if(S.scene==='home')startFromHome();else if(S.scene==='songs')go('preplay');else if(S.scene==='preplay')startGame();else if(S.scene==='results'||S.scene==='gameover')startGame();}
 });
 window.addEventListener('keyup',e=>{if(keys.includes(e.code))releaseLane(keys.indexOf(e.code));});
 window.addEventListener('blur',()=>{if(S.scene==='game')pauseGame();stopPreview();});
