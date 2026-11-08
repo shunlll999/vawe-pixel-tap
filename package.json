@@ -1,0 +1,13 @@
+{
+  "name": "vawe-pixel-tap",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "An offline-first vanilla canvas rhythm game; no package dependencies",
+  "scripts": {
+    "start": "python3 -m http.server 5173",
+    "build": "./build.sh",
+    "deploy": "./build.sh && firebase deploy --only hosting:game"
+  },
+  "license": "UNLICENSED"
+}

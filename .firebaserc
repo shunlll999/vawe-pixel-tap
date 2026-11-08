@@ -1,0 +1,4 @@
+{
+  "projects": { "default": "wciivawe" },
+  "targets": { "wciivawe": { "hosting": { "game": ["wiiwave-game"] } } }
+}

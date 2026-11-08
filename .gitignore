@@ -1,0 +1,7 @@
+analyze_audio.py
+dist/
+node_modules/
+.firebase/
+.DS_Store
+# เพลง/ปกเดโมเดิม (ไม่ได้ใช้แล้ว — เกมดึงจาก gateway) ไม่เผยแพร่ใน public repo เพราะเป็นไฟล์ลิขสิทธิ์
+public/

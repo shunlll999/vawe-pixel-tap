@@ -1,0 +1,25 @@
+{
+  "name": "VAWE TAP — Pixel Rhythm Arcade",
+  "short_name": "VAWE TAP",
+  "description": "Pixel art 4-lane music tap game",
+  "start_url": "./?v=0.3",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0d12",
+  "theme_color": "#0a0d12",
+  "icons": [
+    {
+      "src": "./icons/vawe-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icons/vawe-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
