@@ -124,3 +124,7 @@ export const submitScore = (song, difficulty, r) =>
       score: r.score, maxCombo: r.maxCombo, perfect: r.perfect, great: r.great, good: r.good, miss: r.miss,
     }),
   });
+
+/** Tell the gateway a song was started from the game (counted as a play, flagged as "via game" for the artist). */
+export const recordPlay = (song, difficulty) =>
+  authed(`/tap/songs/${encodeURIComponent(song.id)}/play`, { method: 'POST', body: JSON.stringify({ difficulty: API_DIFF[difficulty] }) });

@@ -1,4 +1,5 @@
-import { getSongLibrary, getChart, setTokenGetter, registerMember, getLeaderboard, submitScore } from './data.js';
+import { getSongLibrary, getChart, setTokenGetter, registerMember, getLeaderboard, submitScore, recordPlay } from './data.js';
+import { track } from './analytics.js';
 import { onUser, getIdToken, signInWithGoogle, signOutUser } from './auth.js';
 
 // VAWE TAP • responsive canvas with a constant logical 390px width.
@@ -59,6 +60,7 @@ onUser(async user=>{
  try{await registerMember();}catch(e){
   if(e.status===403){S.loginError=e.message;signOutUser();S.user=null;return;}
  }
+ track('login',{method:'google'});
  if(S.scene==='login')go(S.afterLogin||'songs');
 });
 async function doSignIn(){
@@ -681,6 +683,8 @@ function resetRun(){
  S.score=0;S.combo=0;S.maxCombo=0;S.perfect=0;S.great=0;S.good=0;S.miss=0;S.life=100;S.result=null;S.lastHit=null;S.particles=[];S.shake=0;S.pressed.clear();S.pointerLanes.clear();
 }
 function startGame(){
+ if(S.user&&S.song){recordPlay(S.song,S.mode).catch(()=>{});}
+ track('tap_game_start',{song_id:S.song?.id,difficulty:S.mode});
  // Chart is preloaded before a screen is shown. audio.play() is called directly
  // from the button event, preserving iOS/Safari's required user gesture.
  S.chart=S.chartsByDiff[S.mode]||null;
@@ -696,6 +700,7 @@ function exitGame(){audio.pause();audio.currentTime=0;S.pressed.clear();go('song
 // A finished song is saved to the leaderboard; a failed run only shows the board (it is never ranked).
 async function saveResult(failed){
  const song=S.song,mode=S.mode;
+ track(failed?'tap_game_over':'tap_game_complete',{song_id:song?.id,difficulty:mode,score:S.score,max_combo:S.maxCombo});
  S.board={status:'loading',data:null,newBest:false,error:''};
  try{
   if(failed){S.board={status:'ready',data:await getLeaderboard(song,mode),newBest:false,error:''};}
