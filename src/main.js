@@ -139,11 +139,12 @@ function sceneSongs(now){
  t('♫  '+(S.song?.bpm||130)+' BPM',58,572,15,C.lime);
  t('◷  '+fmtTime(S.song?.duration),333,572,15,C.orange,'right');
  if(S.songs.length>1){
-  t('◀',59,608,22,C.lime);t('NEXT TRACK ▶',326,609,12,C.lime,'right');
-  zone(42,601,55,43,()=>changeSong(-1));zone(234,601,114,43,()=>changeSong(1));
+  px(42,596,150,48,'#232a33');px(198,596,150,48,'#232a33');
+  t('◀  PREV',117,610,16,C.lime,'center');t('NEXT  ▶',273,610,16,C.lime,'center');
+  zone(36,590,160,60,()=>changeSong(-1));zone(194,590,160,60,()=>changeSong(1));
  }
  button(S.preparing?'LOADING...':'▶  SELECT TRACK',44,665,302,72,()=>{if(!S.preparing)go('preplay');},C.lime,{size:21,active:!S.preparing});
- t('ADD NEW SONGS IN /PUBLIC/SONGS/',W/2,780,11,C.muted,'center');
+ t('SWIPE OR ← → TO CHANGE TRACK',W/2,780,11,C.muted,'center');
 }
 function modeInfo(mode){return {easy:{label:'EASY',desc:'RELAXED • 1-BEAT',color:C.blue},normal:{label:'NORMAL',desc:'GROOVE • HALF-BEAT',color:C.lime},hard:{label:'HARD',desc:'ARCADE • RAPID NOTES',color:C.pink}}[mode];}
 function scenePreplay(now){
@@ -411,8 +412,10 @@ function compactSongs(now){
  t('♫ '+(S.song?.bpm||130)+' BPM',43,statsY,14,C.lime);
  t('◷ '+fmtTime(S.song?.duration),348,statsY,14,C.orange,'right');
  if(S.songs.length>1){
-   t('◀',43,statsY-50,17,C.lime);t('NEXT ▶',346,statsY-50,13,C.lime,'right');
-   zone(24,statsY-55,55,41,()=>changeSong(-1));zone(284,statsY-55,74,41,()=>changeSong(1));
+   // Large tap targets (also: swipe the card left/right, or use ← → keys).
+   px(30,statsY-62,150,44,'#232a33');px(210,statsY-62,150,44,'#232a33');
+   t('◀  PREV',105,statsY-50,15,C.lime,'center');t('NEXT  ▶',285,statsY-50,15,C.lime,'center');
+   zone(22,statsY-70,172,60,()=>changeSong(-1));zone(196,statsY-70,172,60,()=>changeSong(1));
  }
  button(S.preparing?'LOADING...':'▶  SELECT TRACK',25,btnY,340,56,()=>{if(!S.preparing)go('preplay')},C.lime,{size:19,active:!S.preparing});
 }
@@ -680,7 +683,9 @@ function pointerRelease(ev){
  pendingMenuTaps.delete(ev.pointerId);
  if(!initial)return;
  const {x,y}=coords(ev);
- if(Math.hypot(x-initial.x,y-initial.y)>13)return;
+ const mdx=x-initial.x,mdy=y-initial.y;
+ if(S.scene==='songs'&&Math.abs(mdx)>40&&Math.abs(mdx)>Math.abs(mdy)*1.5){changeSong(mdx<0?1:-1);return;}
+ if(Math.hypot(mdx,mdy)>13)return;
  for(let i=clickZones.length-1;i>=0;i--){
   const z=clickZones[i];
   if(x>=z.x && x<=z.x+z.w && y>=z.y && y<=z.y+z.h){z.fn();break;}
@@ -696,6 +701,7 @@ canvas.addEventListener('pointercancel',ev=>{
 const keys=['KeyD','KeyF','KeyJ','KeyK'];
 const arrowKeys={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
 window.addEventListener('keydown',e=>{
+ if(S.scene==='songs'&&(e.code==='ArrowLeft'||e.code==='ArrowRight')){e.preventDefault();changeSong(e.code==='ArrowRight'?1:-1);return;}
  if(arrowKeys[e.code]&&S.scene==='game'){e.preventDefault();if(!e.repeat)hitSwipe(arrowKeys[e.code]);return;}
  if(keys.includes(e.code)){
   e.preventDefault();if(!e.repeat)hitLane(keys.indexOf(e.code));return;
@@ -723,7 +729,7 @@ async function prepareSong(song){
    loadImage(song.pixelCoverUrl).then(pixelate),loadImage(song.coverUrl),
    Promise.all(['easy','normal','hard'].map(d=>getChart(song,d)))
   ]);
-  if(token!==S.libraryToken)return;
+  if(token!==S.libraryToken){S.preparing=false;return;}
   S.cover=pixelCover;S.originalCover=originalCover;
   S.chartsByDiff={easy:charts[0],normal:charts[1],hard:charts[2]};
   S.chart=S.chartsByDiff[S.mode];
