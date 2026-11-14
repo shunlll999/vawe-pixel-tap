@@ -1055,7 +1055,7 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden&&(S.scene==
 audio.addEventListener('ended',()=>finishGame());
 audio.addEventListener('error',()=>{if(S.scene==='game')showError(new Error('ไม่สามารถโหลดไฟล์เสียงได้ เพลงอาจถูกถอดออกหรือเครือข่ายมีปัญหา'));});
 // Cover art comes from the CDN at full size: downsample it so it keeps the pixel-art look.
-// Centre-crops the cover to a square (YouTube thumbnails are 16:9) at full quality — no pixelation.
+// Centre-crops the cover to a square at full quality (no pixelation).
 function pixelate(image,size=512){
  if(!image)return null;
  try{const c=document.createElement('canvas');c.width=c.height=size;const g=c.getContext('2d');g.imageSmoothingEnabled=true;const iw=image.naturalWidth||image.width,ih=image.naturalHeight||image.height,sq=Math.min(iw,ih)||size;g.drawImage(image,(iw-sq)/2,(ih-sq)/2,sq,sq,0,0,size,size);return c;}catch{return image;}
