@@ -878,7 +878,11 @@ function finishGame(){
  if(S.life<=0){failGame();return;}
  media.pause();S.pressed.clear();S.pointerLanes.clear();
  // Count any missed notes after song ends, including all notes not reached by player.
- for(const n of S.notes)if(n.status==='pending'){n.status='miss';S.miss++;}
+ for(const n of S.notes){
+  if(n.status==='pending'){n.status='miss';S.miss++;}
+  else if(n.status==='holding'){holdPay(n,0,true);n.status='hit';} // song ended while held: full tail
+ }
+ S.maxCombo=Math.min(S.maxCombo,S.perfect+S.great+S.good);
  S.result={score:S.score,combo:S.maxCombo,grade:grade(),failed:false};S.scene='results';sfx.win();
  saveResult(false);
 }
@@ -912,8 +916,15 @@ function reward(n,label,lane){
  S.shake=label==='PERFECT'?5:2;
  S.lastHit={label,when:performance.now()};
  emitParticles(lane,label);
- if(n.type==='hold'&&n.duration>0){n.status='holding';} else {n.status='hit';}
+ if(n.type==='hold'&&n.duration>0){n.status='holding';n.paid=0;} else {n.status='hit';}
  if(navigator.vibrate)try{navigator.vibrate(12);}catch{}
+}
+// Hold notes: the tail pays HOLD_PTS_PER_SEC for every second actually held (counted from the note's start).
+const HOLD_PTS_PER_SEC=100;
+function holdPay(n,tnow,full=false){
+ const held=full?n.duration:Math.max(0,Math.min(n.duration,tnow-n.time));
+ const target=Math.floor(HOLD_PTS_PER_SEC*held);
+ if(target>n.paid){S.score+=target-n.paid;n.paid=target;}
 }
 function miss(n){
  if(S.scene!=='game'||n.status!=='pending')return;
@@ -929,7 +940,10 @@ function updateGame(now){
   if(n.status==='pending' && n.time<tnow-JUDGE_WINDOWS.good)miss(n);
   // A miss may end the run. Don't process further notes after that transition.
   if(S.scene!=='game')return;
-  if(n.status==='holding' && tnow>=n.time+n.duration-.06){n.status='hit';S.score+=100;emitParticles(n.lane,'PERFECT');}
+  if(n.status==='holding'){
+   holdPay(n,tnow);
+   if(tnow>=n.time+n.duration-.06){holdPay(n,tnow,true);n.status='hit';emitParticles(n.lane,'PERFECT');}
+  }
  }
  const dur=media.duration();
  if(media.ended() || (dur && media.time()>=dur-.035))finishGame();
@@ -975,8 +989,11 @@ function releaseLane(lane){
  const now=effectiveTime();
  for(const n of S.notes){
   if(n.lane===lane && n.status==='holding' && now<n.time+n.duration-.15){
-    // The hold head was already judged (PERFECT/GREAT/GOOD) when it started: breaking it early costs combo + life but is not a second judgement.
-    n.status='miss';S.combo=0;S.life=Math.max(0,S.life-3);
+    // Let go early: keep the points for the part that was held, and count the note as a MISS for the rest.
+    // (The head was already counted as PERFECT/GREAT/GOOD; move it to MISS so one note is never judged twice.)
+    holdPay(n,now);
+    if(n.hitGrade==='PERFECT')S.perfect--;else if(n.hitGrade==='GREAT')S.great--;else if(n.hitGrade==='GOOD')S.good--;
+    S.miss++;n.status='miss';S.combo=0;S.life=Math.max(0,S.life-3);
     S.lastHit={label:'MISS',when:performance.now()};
     if(S.life<=0){failGame();return;}
   }
