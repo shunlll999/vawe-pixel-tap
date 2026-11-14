@@ -1,4 +1,4 @@
-import { getSongLibrary, getChart, setTokenGetter, registerMember, getLeaderboard, submitScore, recordPlay, sendVerification } from './data.js';
+import { getSongLibrary, getChart, setTokenGetter, registerMember, getLeaderboard, getOverallLeaderboard, submitScore, recordPlay, sendVerification } from './data.js';
 import { track } from './analytics.js';
 import { sfx, unlock as unlockSfx } from './sfx.js';
 import { onUser, getIdToken, signInWithGoogle, signOutUser, signInWithEmail, registerWithEmail, currentUser as getCurrentUser } from './auth.js';
@@ -622,8 +622,12 @@ function compactHome(now){
  if(S.user){t('SIGN OUT',W-24,taglineY,12,C.muted,'right');zone(W-110,taglineY-8,100,28,signOutAndHome);}
  if(S.user&&!S.user.verified){t('✉ VERIFY EMAIL',W/2+18,taglineY,12,C.orange,'center');zone(W/2-62,taglineY-8,160,28,resendVerification);}
  button('▶  START GAME',25,startY,340,56,startFromHome,C.lime,{size:21});
- button('⚙  TIMING / SETTINGS',55,settingsY,280,43,()=>go('settings'),C.blue,{size:15});
+ // bottom row: settings · overall ranking · wiiwave.com
+ button('⚙ SETTINGS',25,settingsY,108,43,()=>go('settings'),C.blue,{size:11});
+ button('🏆 RANKING',141,settingsY,108,43,()=>go('ranking'),C.orange,{size:11});
+ button('WIIWAVE.COM',257,settingsY,108,43,openWiiwave,C.pink,{size:11});
 }
+function openWiiwave(){try{window.open('https://wiiwave.com','_blank','noopener');}catch{}}
 function compactSongs(now){
  bg('home',now);
  compactHeader('SONG SELECT',String(S.songs.indexOf(S.song)+1).padStart(2,'0')+' / '+String(S.songs.length).padStart(2,'0'));
@@ -761,6 +765,58 @@ function compactResults(now){
  button('↻  PLAY AGAIN',27,btnY,336,54,()=>startGame(),C.lime,{size:20});
  button('⌂  SONG SELECT',57,H-54,276,41,()=>go('songs'),C.blue,{size:16});
 }
+// ── Overall ranking: every song, summed per player, one tab per difficulty ──
+S.rank={diff:'normal',status:'idle',data:null,error:'',token:0};
+async function loadRanking(){
+ const diff=S.rank.diff,token=++S.rank.token;
+ S.rank.status='loading';S.rank.data=null;
+ try{const data=await getOverallLeaderboard(diff,50);if(token===S.rank.token)S.rank={...S.rank,status:'ready',data,error:''};}
+ catch(e){if(token===S.rank.token)S.rank={...S.rank,status:'error',data:null,error:e.message||''};}
+}
+function compactRanking(now){
+ bg('home',now);compactHeader('OVERALL RANKING');
+ t('ALL SONGS · BEST SCORES ADDED UP',W/2,76,11,C.muted,'center');
+ // difficulty tabs
+ ['easy','normal','hard'].forEach((mode,i)=>{
+  const info=modeInfo(mode),x=25+i*115,on=S.rank.diff===mode;
+  px(x,100,110,34,on?info.color:'#232a33');
+  t(info.label,x+55,109,13,on?C.ink:C.white,'center');
+  zone(x,100,110,34,()=>{if(S.rank.diff!==mode){S.rank.diff=mode;loadRanking();}});
+ });
+ const r=S.rank,btnY=H-62,top=148;
+ panel(22,top,346,btnY-top-12,'#191d25','#475148');
+ const x=40,w=310;let y=top+14;
+ if(r.status==='loading'||r.status==='idle'){t('LOADING...',W/2,y+60,13,C.orange,'center');}
+ else if(r.status==='error'){t('RANKING UNAVAILABLE',W/2,y+50,12,C.red,'center');t(clip(r.error,32),W/2,y+72,10,C.muted,'center');}
+ else{
+  const d=r.data;
+  t(d.total_players+(d.total_players===1?' PLAYER':' PLAYERS')+' · '+d.total_songs+' SONGS',x,y,11,C.lime);
+  t('TOTAL',x+w,y,11,C.muted,'right');
+  y+=22;
+  const meH=d.me&&!d.top.some(e=>e.is_me)?40:(d.me?0:32);
+  const rows=Math.max(1,Math.floor((top+(btnY-top-12)-y-meH-8)/34));
+  if(!d.top.length)t('NO SCORES YET — BE THE FIRST!',W/2,y+30,12,C.muted,'center');
+  d.top.slice(0,rows).forEach(e=>{
+   if(e.is_me)px(x-6,y-4,w+12,32,'#2a3a1c');
+   drawMedal(x,y+1,e.rank);
+   t(clip(e.name,14),x+34,y+1,13,e.is_me?C.lime:C.white);
+   t(e.songs+(e.songs===1?' song':' songs'),x+34,y+17,9,C.muted);
+   t(e.total.toLocaleString('en-US'),x+w,y+4,14,e.is_me?C.lime:C.orange,'right');
+   y+=34;
+  });
+  const by=top+(btnY-top-12)-meH-4;
+  if(d.me&&!d.top.slice(0,rows).some(e=>e.is_me)){
+   px(x,by,w,2,'#42494c');
+   px(x-6,by+6,w+12,30,'#1d2b33');
+   t('YOU  #'+d.me.rank+' / '+d.total_players,x,by+14,13,C.blue);
+   t(d.me.total.toLocaleString('en-US'),x+w,by+14,14,C.blue,'right');
+  }else if(!d.me){
+   px(x,by,w,2,'#42494c');
+   t(S.user?'PLAY SONGS TO GET RANKED':'SIGN IN & PLAY TO GET RANKED',W/2,by+12,11,C.muted,'center');
+  }
+ }
+ button('⌂  HOME',57,btnY,276,48,()=>go('home'),C.lime,{size:17});
+}
 function compactPause(now){
  sceneGame(now);px(0,0,W,H,'#06080bdd');
  const dialogH=360,dy=Math.round((H-dialogH)/2);
@@ -806,6 +862,7 @@ function draw(now){
  else if(S.scene==='songs')compactSongs(now);
  else if(S.scene==='preplay')compactPreplay(now);
  else if(S.scene==='settings')compactSettings(now);
+ else if(S.scene==='ranking')compactRanking(now);
  else if(S.scene==='results'||S.scene==='gameover')compactResults(now);
 }
 function tick(now){
@@ -833,7 +890,7 @@ function playPreview(song){
 }
 function stopPreview(){if(!previewAudio.paused)previewAudio.pause();previewSongId=null;}
 function go(scene){const prev=S.scene;if((scene==='songs'||scene==='preplay')&&!S.user){S.afterLogin=scene;scene='login';}
- if(scene==='songs')setTimeout(()=>playPreview(S.song),0);else stopPreview();if(scene==='home')syncSlideToSong();if(S.scene==='game'&&scene!=='pause')media.pause();if(scene!==prev)sfx.whoosh();S.scene=scene;}
+ if(scene==='songs')setTimeout(()=>playPreview(S.song),0);else stopPreview();if(scene==='home')syncSlideToSong();if(S.scene==='game'&&scene!=='pause')media.pause();if(scene!==prev)sfx.whoosh();S.scene=scene;if(scene==='ranking'){S.rank.diff=S.mode;loadRanking();}}
 function effectiveTime(){return media.time()+S.offsetMs/1000;}
 function resetRun(){
  S.notes=S.chart.notes.map(n=>({...n,status:'pending',hitGrade:null}));

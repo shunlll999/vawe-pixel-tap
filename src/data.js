@@ -116,6 +116,10 @@ export const registerMember = () => authed('/users/me');
 export const getLeaderboard = (song, difficulty) =>
   authed(`/tap/songs/${encodeURIComponent(song.id)}/leaderboard?difficulty=${API_DIFF[difficulty]}`);
 
+/** Overall ranking across every song (sum of each player's best scores) for one difficulty. Works signed-out too. */
+export const getOverallLeaderboard = (difficulty, limit = 20) =>
+  authed(`/tap/leaderboards/overall?difficulty=${API_DIFF[difficulty]}&limit=${limit}`);
+
 export const submitScore = (song, difficulty, r) =>
   authed('/tap/scores', {
     method: 'POST',
