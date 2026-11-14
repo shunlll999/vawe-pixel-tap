@@ -49,3 +49,8 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.2;ba
 .lp-link[hidden]{display:none}
 .notice{position:absolute;left:12px;right:12px;top:12px;z-index:9;background:#10200a;border:2px solid #a5ff48;color:#e9ffd0;padding:10px 12px;font-size:12px;line-height:1.5;text-align:center;font-family:ui-monospace,Consolas,'Sarabun',Tahoma,sans-serif}
 .notice[hidden]{display:none}
+
+/* YouTube songs: the video plays behind the canvas (iframe can't be drawn into a canvas); the canvas is transparent in-game. */
+.yt-wrap{position:absolute;inset:0;z-index:0;overflow:hidden;background:#000;pointer-events:none}
+.yt-wrap iframe{position:absolute;top:50%;left:50%;height:100%;width:100%;transform:translate(-50%,-50%);border:0;pointer-events:none}
+.machine canvas{position:relative;z-index:1}

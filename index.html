@@ -31,7 +31,10 @@
     <link rel="manifest" href="./manifest.webmanifest?v=0.5" />
     <link rel="apple-touch-icon" href="./icons/vawe-192.png" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%230b0b0e'/%3E%3Cpath d='M8 15h12l12 27 12-27h12L37 54H27z' fill='%23a4ff3f'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="./src/styles.css?v=0.5" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Sriracha&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./src/styles.css?v=0.6" />
   </head>
   <body>
     <div class="ambient ambient-left" aria-hidden="true"></div>
@@ -39,6 +42,7 @@
     <main class="shell">
       <div class="badge-row" aria-hidden="true"><span>VAWE / ARCADE</span><span>BUILD 0.6 — GATEWAY</span></div>
       <div class="machine" id="gameContainer">
+        <div id="ytWrap" class="yt-wrap" aria-hidden="true"><div id="ytHost"></div></div>
         <canvas id="game" width="390" height="844" aria-label="VAWE TAP pixel art rhythm game. Use keys D F J K or touch the lanes."></canvas>
         <div id="loginPanel" class="login-panel" hidden>
           <div class="login-card">
@@ -69,6 +73,6 @@
       <div class="footer-hint">♪ AUDIO SYNC <span>●</span> TOUCH · SWIPE / D F J K · ARROWS</div>
     </main>
     <audio id="track" preload="auto"></audio>
-    <script type="module" src="./src/main.js?v=0.5"></script>
+    <script type="module" src="./src/main.js?v=0.6"></script>
   </body>
 </html>
