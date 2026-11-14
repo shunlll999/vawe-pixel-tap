@@ -32,33 +32,6 @@ function toSong(item, index) {
   };
 }
 
-/** YouTube songs (admin-generated beat maps). Only the game lists them — never the record pool. */
-function toYoutubeSong(item, index) {
-  return {
-    id: item.id,
-    title: item.title || 'Untitled',
-    artist: item.artist || '',
-    bpm: Number(item.bpm) || 0,
-    duration: Number(item.duration_sec) || 0,
-    color: LANE_COLORS[index % LANE_COLORS.length],
-    audioUrl: '',
-    previewUrl: '',
-    coverUrl: item.cover_url || '',
-    pixelCoverUrl: item.cover_url || '',
-    difficulties: item.difficulties || [],
-    youtube: { videoId: item.video_id },
-  };
-}
-
-async function getYoutubeSongs() {
-  try {
-    const r = await api('/tap/youtube/songs');
-    return (r.items || []).filter((i) => i.video_id).map(toYoutubeSong);
-  } catch {
-    return []; // YouTube songs are optional: never block the game if this call fails
-  }
-}
-
 export async function getSongLibrary() {
   const items = [];
   let cursor = null;
@@ -68,7 +41,6 @@ export async function getSongLibrary() {
     cursor = page.nextCursor;
   } while (cursor && items.length < 500);
   const songs = items.filter((i) => i.audio_url).map(toSong);
-  songs.push(...(await getYoutubeSongs()));
   if (!songs.length) throw new Error('ยังไม่มีเพลงที่สร้าง beat แล้ว (ให้ admin กด generate ที่ wiiwave.com)');
   return songs;
 }
